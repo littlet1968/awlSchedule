@@ -12,11 +12,17 @@ class awlAPI():
     def __init__(self, configFile = None):
         self.apiUrl = 'https://buergerportal.awl-neuss.de/api/v1/calendar'
         self.strUrl = '/townarea-streets'
+        self.townStreets = None
+
         # get configuration data
-        confData = self.getconf(configFile)
+        self.confData = self.getconf(configFile)
         # if we don't have correct data show help
-        if not confData:
-            self.help() 
+        if not self.confData:
+            self.help()
+        else:
+            self.valstreet()
+
+        self.townStreets = self.gettownstreets(self)
 
     def getconf(self, configFile):
         """get the config
@@ -45,6 +51,19 @@ class awlAPI():
             print("Error reading configuration file %s: %s -  " % (configFile,e))
             exit(1)
 
+    def gettownstreets(self):
+        """get all town streets from the website"""
+        try:
+            # returns all streetcodes from the website
+            resTownStr = requests.get(self.apiUrl + self.strUrl) 
+        except Exception as e:
+            # we have a problem, then exit
+            print('Error getting TownStreets: %s' % e)
+            exit(1) 
+        
+        townStreets = json.loads(resTownStr.text)
+        return townStreets
+
     def getschedule(self):
         self.confData = self.getconf(self.configFile)
         if self.confData['config']:
@@ -62,47 +81,44 @@ class awlAPI():
             else:
                 raise Exception('Bulding Number needed but not found in config.')
 
-
     def valstreet(self):
         """ tries to validate the StreetName with HouseNumber to the StreetCode
         """
-        try:
-            # returns all streetcodes from the website
-            resTownStr = requests.get(self.apiUrl + self.strUrl) 
-        except Exception as e:
-            # we have a problem, then exit
-            print('Error getting TownStreets: %s' % e)
-            exit(1)
-        
-        townStreets = json.loads(resTownStr.text)
         # first case we have already a streetNumber
-        # if self.streetNumber:
-    
-    def getstreets(self, searchStr = None):
-        'get all registered streets'
-        try:
-            # returns all streetcodes from the website
-            resTownStr = requests.get(self.apiUrl + self.strUrl) 
-        except Exception as e:
-            # we have a problem, then exit
-            print('Error getting TownStreets: %s' % e)
-            exit(1) 
-        allStreets = json.loads(resTownStr.text)
+        if self.confData['config']['StrasseNummer']:
+            for item in self.townStreets:
+                print
+        # we have a street name but no street code try to match it to a street code 
+        if self.confData['config']['StrasseName'] and not self.confData['config']['StrasseNummer']:
+            for item in self.townStreets:
+                if 
 
-        for item in allStreets:
-            print("StrasseName: %s | StrasseNummer: %s | BlockedNR: %s" % 
-                  (item['strasseBezeichnung'], item['strasseNummer'],
-                   item['blockedHomeNumbers']))
+
+    
+    def searchstr(self, searchStr = None):
+        """search for a street(s) by pattern 
+        then prints the strasseNummer and strasseBezeichnung that can be used for the conf file        
+        """
+        for item in self.townStreets:
+            if searchStr:
+                if searchStr in item['strasseBezeichnung']:
+                    print("StrasseNummer: %s | StrasseName: %s | BlockedNR: %s" % 
+                          (item['strasseNummer'], item['strasseBezeichnung'], 
+                           item['blockedHomeNumbers']))
+            else:
+                print("StrasseNummer: %s | StrasseName: %s | BlockedNR: %s" % 
+                (item['strasseNummer'], item['strasseBezeichnung'], 
+                 item['blockedHomeNumbers']))
         
     def help(self):
         """display some help"""
         os.system('clear')
         print("No valid awl.conf provided!\n")
-        print("You can call awlAPI.getstreets([searchStr='pattern'])")
+        print("You can call awlAPI.searchstr([searchStr='pattern'])")
         print("to retrieve a list of all streets. From that list get the correct streetCode") 
         print("and house number to be entered into the configuration file!")
-
-
+        print("If more than one street name matches make sure to use the sreet number where the house number is in the list!")
+        print("\n\n")
 
 
 def main():
@@ -159,8 +175,9 @@ def main():
                     # print()                               # Collection type
 
 if __name__ == '__main__':
-    awl = awlAPI('../abfallKalender/awl.conf')
-    awl.getstreets()
+    awl = awlAPI('../littlet.conf')
     #awl = awlAPI()
+    awl.getstreets("Bergheim")
+    print(awl.confData)
 
     #main()
