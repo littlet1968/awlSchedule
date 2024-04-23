@@ -4,6 +4,7 @@ import requests
 import json
 import datetime
 import os
+import re
 
 class awlAPI():
     """ awlAPI - access to the (Neuss) AWL API
@@ -16,13 +17,15 @@ class awlAPI():
 
         # get configuration data
         self.confData = self.getconf(configFile)
+        # get all streets
+        self.townStreets = self.gettownstreets()
+
         # if we don't have correct data show help
         if not self.confData:
             self.help()
-        else:
-            self.valstreet()
+        #else:
+        #    self.valstreet()   # not implemented yet
 
-        self.townStreets = self.gettownstreets(self)
 
     def getconf(self, configFile):
         """get the config
@@ -64,36 +67,76 @@ class awlAPI():
         townStreets = json.loads(resTownStr.text)
         return townStreets
 
-    def getschedule(self):
-        self.confData = self.getconf(self.configFile)
-        if self.confData['config']:
-            if self.confData['config']['StreetNumber']:
-                self.streetNumber = self.confData['config']['StreetNumber']
-            if self.confData['config']['StreetName']:
-                self.streetName = self.confData['config']['StreetName']
+    def getschedule(self, monat = None, tonne = None, jahr = False):
+        """ getschedule
+        [monat] = the current month of if specified the month of interest 1-12
+        [tonne] = all or the type of the waste basket (tonnen farbe: grau,pink - residual waste,
+                    yellow - recycle,blue - paper)  
+        [jahr] = current month or True for the full year
+        """
+        args = {
+            "streetNum": self.confData['config']['StrasseNummer'],
+            "homeNumber": self.confData['config']['HausNummer']
+        }
+        if not monat:
+            args["startMonth"] = datetime.datetime.now().strftime('%b %Y')
+        else:
+            try:
+                if 1 <= int(month) <= 12:
+                    print("Valid month")
+                else:
+                    print("%s, does not look like a valid month" % month) 
+                    return None
+            except:
+                print("%s is not a valid number between 1 and 12" % month)
+                pass
+                return None
+      
+        
+        if jahr:
+            #get the data for the full year
+            args["isYear"] = "true" 
+        else:
+            args["isYear"] = "false" 
 
-            if not self.streetName or not self.streetName:
-                raise Exception(
-                    'StreetName or StreetNumber needed but not found in config.')
-                      
-            if self.confData['config']['HouseNumber']:
-                self.bldNumber = self.confData['config']['HouseNumber']
-            else:
-                raise Exception('Bulding Number needed but not found in config.')
+        # additional arguments (not used here) 
+        args["isTreeMonthRange"] = "false"  # get 3 month range disables isYear
+        
+        try:
+            resSchedule = requests.get(self.apiUrl, params=args)
+        except Exception as e:
+            print("Error trying to get schedule data: %s" % e)
+            exit(1)
+        
+        scheduleData = json.loads(resSchedule.text)
 
+        # if we got something return the data
+        if scheduleData:
+            return scheduleData
+        else:
+        # otherwise return None
+            return None
+        
     def valstreet(self):
         """ tries to validate the StreetName with HouseNumber to the StreetCode
         """
-        # first case we have already a streetNumber
-        if self.confData['config']['StrasseNummer']:
-            for item in self.townStreets:
-                print
-        # we have a street name but no street code try to match it to a street code 
-        if self.confData['config']['StrasseName'] and not self.confData['config']['StrasseNummer']:
-            for item in self.townStreets:
-                if 
+        if not self.townStreets:
+            self.townStreets = self.gettownstreets()
 
+        for item in townStreets:
+            hNumbers = re.findall("[0-9]+", item["strasseBezeichnung"])
+            if len(hNumbers) > 0:
+                print("we have %i HomeNumber groups" % len(hNumbers))
+                if len(hNumbers) % 2:
+                    for hN in hNumbers:
+                       print(hN)
 
+            ## we have a street name but no street code try to match it to a street code 
+            #if self.confData['config']['StrasseName'] and not self.confData['config']['StrasseNummer']:
+            #    # do we found the street name in strasseBezeihnung
+            #    if self.confData['config']['StrasseName'] in item['strasseBezeichnung']:
+            #        # does the strasseBezeichnung has some numbers in
+            #        self.confData['config']['StasseNummer'] = item['strasseNummer']
     
     def searchstr(self, searchStr = None):
         """search for a street(s) by pattern 
@@ -176,8 +219,18 @@ def main():
 
 if __name__ == '__main__':
     awl = awlAPI('../littlet.conf')
-    #awl = awlAPI()
-    awl.getstreets("Bergheim")
-    print(awl.confData)
-
+    ##awl = awlAPI()
+    #awl.searchstr("Bergheim")
+    #print(awl.confData)
     #main()
+    data = awl.getschedule(13)
+    
+    if data:
+        for key, value in data.items():
+            month_year: list[str] = key.split("-")
+            month: int = int(month_year[0]) + 1
+            year: int = int(month_year[1])
+            for dayValue, wastes in value.items():
+                day: int = int(dayValue)
+                for waste in wastes:
+                        print(datetime.date(year, month, day), waste)  # Collection date
