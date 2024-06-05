@@ -14,18 +14,18 @@ class awlAPI():
         self.apiUrl = 'https://buergerportal.awl-neuss.de/api/v1/calendar'
         self.strUrl = '/townarea-streets'
         self.townStreets = None
+        self.wasteBins = ["blau","braun","gelb","grau","pink"]
 
         # get configuration data
         self.confData = self.getconf(configFile)
         # get all streets
         self.townStreets = self.gettownstreets()
 
-        # if we don't have correct data show help
+        # if we don't have correct data show help"
         if not self.confData:
             self.help()
         #else:
         #    self.valstreet()   # not implemented yet
-
 
     def getconf(self, configFile):
         """get the config
@@ -69,9 +69,9 @@ class awlAPI():
 
     def getschedule(self, monat = None, tonne = None, jahr = False):
         """ getschedule
-        [monat] = the current month of if specified the month of interest 1-12
-        [tonne] = all or the type of the waste basket (tonnen farbe: grau,pink - residual waste,
-                    yellow - recycle,blue - paper)  
+        [monat] = the current month or if specified the month of interest 1-12
+        [tonne] = all or the type of the waste bin type (tonnen farbe: grau,pink - residual waste,
+                  yellow - recycle, blue - paper)  false
         [jahr] = current month or True for the full year
         """
         args = {
@@ -82,26 +82,34 @@ class awlAPI():
             args["startMonth"] = datetime.datetime.now().strftime('%b %Y')
         else:
             try:
-                if 1 <= int(month) <= 12:
-                    print("Valid month")
+                if 1 <= int(monat) <= 12:
+                    # print("Valid month")
+                    args["startMonth"] = datetime.date(datetime.datetime.now().year,5,1).strftime('%b %Y')
                 else:
-                    print("%s, does not look like a valid month" % month) 
+                    print("%s, does not look like a valid month between 1 and 12" % monat) 
                     return None
             except:
-                print("%s is not a valid number between 1 and 12" % month)
+                print("%s is not a valid number between 1 and 12" % monat)
                 pass
                 return None
-      
-        
+              
         if jahr:
             #get the data for the full year
             args["isYear"] = "true" 
         else:
             args["isYear"] = "false" 
 
+        try:
+            if tonne in self.wasteBins:
+                args["tonne"] = tonne
+        except Exception as e:
+            print("Not a valid waste bin type spezified: %s" %tonne)
+            pass
+     
         # additional arguments (not used here) 
-        args["isTreeMonthRange"] = "false"  # get 3 month range disables isYear
+        args["isTreeMonthRange"] = "true"  # get 3 month range disables isYear
         
+        # print(args)
         try:
             resSchedule = requests.get(self.apiUrl, params=args)
         except Exception as e:
@@ -116,7 +124,45 @@ class awlAPI():
         else:
         # otherwise return None
             return None
+
+    def nextpickup(self, tonne = None):
+        """ shows the next pickup date 
+        optional tonne shows the next pickup date for specified waste type(s)
+        no catchup for nothing found yet
+        """
+        someThingFound = False
+        toDay = datetime.datetime.now().day
+        toMonth = datetime.datetime.now().month
+
+        # get the fixtures for the full year in case 
+        fixtureData = self.getschedule()
         
+        if fixtureData:
+            for mY, fixtures in fixtureData.items():
+                monthYear = mY.split('-')
+                month = int(monthYear[0]) + 1
+            
+                for day, pickupTonne in fixtures.items():
+                    if int(day) >= toDay and int(month) == toMonth:
+                        someThingFound = True
+                        break
+                    elif int(month) == toMonth +1:
+                        # get the first date from next month
+                        someThingFound = True
+                        #print("Next Month")
+                        #print(day, month, pickupTonne)
+                        break
+                # we found a date break out of the loop
+                if someThingFound:
+                    break
+                
+            if someThingFound:
+                year = int(monthYear[1])
+                pickupDate = datetime.date(year, month, int(day)).strftime('%A, %d %B %Y')
+                print("Next pickup date %s - %s" %(pickupDate, pickupTonne))
+                
+
+            
     def valstreet(self):
         """ tries to validate the StreetName with HouseNumber to the StreetCode
         """
@@ -163,7 +209,7 @@ class awlAPI():
         print("If more than one street name matches make sure to use the sreet number where the house number is in the list!")
         print("\n\n")
 
-
+# "my Original test case"
 def main():
     apiUrl = 'https://buergerportal.awl-neuss.de/api/v1/calendar'
     streetName = 'Goethestrasse'
@@ -223,14 +269,15 @@ if __name__ == '__main__':
     #awl.searchstr("Bergheim")
     #print(awl.confData)
     #main()
-    data = awl.getschedule(13)
-    
-    if data:
-        for key, value in data.items():
-            month_year: list[str] = key.split("-")
-            month: int = int(month_year[0]) + 1
-            year: int = int(month_year[1])
-            for dayValue, wastes in value.items():
-                day: int = int(dayValue)
-                for waste in wastes:
-                        print(datetime.date(year, month, day), waste)  # Collection date
+    #data = awl.getschedule(5, tonne='gelb')
+    awl.nextpickup()
+
+#    if data:
+#        for key, value in data.items():
+#            month_year: list[str] = key.split("-")
+#            month: int = int(month_year[0]) + 1
+#            year: int = int(month_year[1])
+#            for dayValue, wastes in value.items():
+#                day: int = int(dayValue)
+#                for waste in wastes:
+#                        print(datetime.date(year, month, day), waste)  # Collection date
