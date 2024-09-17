@@ -78,6 +78,7 @@ class awlAPI():
             "streetNum": self.confData['config']['StrasseNummer'],
             "homeNumber": self.confData['config']['HausNummer']
         }
+
         if not monat:
             args["startMonth"] = datetime.datetime.now().strftime('%b %Y')
         else:
@@ -96,19 +97,18 @@ class awlAPI():
         if jahr:
             #get the data for the full year
             args["isYear"] = "true" 
+            args["isTreeMonthRange"] = "false" # get 3 month range disables isYear
         else:
-            args["isYear"] = "false" 
+            args["isYear"] = "false"
+            args["isTreeMonthRange"] = "true"  # get 3 month range disables isYear
 
         try:
             if tonne in self.wasteBins:
-                args["tonne"] = tonne
+                args["tonne"] = tonne  # is getting ignored ?!?!?!
         except Exception as e:
             print("Not a valid waste bin type spezified: %s" %tonne)
             pass
      
-        # additional arguments (not used here) 
-        args["isTreeMonthRange"] = "true"  # get 3 month range disables isYear
-        
         # print(args)
         try:
             resSchedule = requests.get(self.apiUrl, params=args)
@@ -127,12 +127,16 @@ class awlAPI():
 
     def nextpickup(self, tonne = None):
         """ shows the next pickup date 
-        optional tonne shows the next pickup date for specified waste type(s)
-        no catchup for nothing found yet
+        optional tonne shows the next pickup date for specified waste type
         """
         someThingFound = False
         toDay = datetime.datetime.now().day
         toMonth = datetime.datetime.now().month
+
+        if tonne:
+            if tonne not in self.wasteBins:
+                # print("Not a valid waste type")
+                return "Not valid tonne"
 
         # get the fixtures for the full year in case 
         fixtureData = self.getschedule()
@@ -143,6 +147,13 @@ class awlAPI():
                 month = int(monthYear[0]) + 1
             
                 for day, pickupTonne in fixtures.items():
+                    # do we have a tonne specified and is valid
+                    if tonne in self.wasteBins:
+                        # is the tonne what we are looking for
+                        if tonne not in pickupTonne:
+                            # if not continue the loop 
+                            continue
+
                     if int(day) >= toDay and int(month) == toMonth:
                         someThingFound = True
                         break
@@ -159,17 +170,18 @@ class awlAPI():
             if someThingFound:
                 year = int(monthYear[1])
                 pickupDate = datetime.date(year, month, int(day)).strftime('%A, %d %B %Y')
-                print("Next pickup date %s - %s" %(pickupDate, pickupTonne))
-                
-
-            
+                # print("Next pickup date %s - %s" %(pickupDate, pickupTonne))
+                return pickupDate, pickupTonne
+        
+        return None, None
+           
     def valstreet(self):
         """ tries to validate the StreetName with HouseNumber to the StreetCode
         """
         if not self.townStreets:
             self.townStreets = self.gettownstreets()
 
-        for item in townStreets:
+        for item in self.townStreets:
             hNumbers = re.findall("[0-9]+", item["strasseBezeichnung"])
             if len(hNumbers) > 0:
                 print("we have %i HomeNumber groups" % len(hNumbers))
@@ -206,11 +218,31 @@ class awlAPI():
         print("You can call awlAPI.searchstr([searchStr='pattern'])")
         print("to retrieve a list of all streets. From that list get the correct streetCode") 
         print("and house number to be entered into the configuration file!")
-        print("If more than one street name matches make sure to use the sreet number where the house number is in the list!")
+        print("If more than one street name matches make sure to use the sreet number where your house number is in the list!")
         print("\n\n")
 
-# "my Original test case"
 def main():
+    awl = awlAPI('../littlet.conf')
+    # awl.searchstr("Bergheim")
+    #print(awl.confData)
+    #main()
+    #nextPD, nextPT = awl.nextpickup(tonne='blau')
+    nextPD, nextPT = awl.nextpickup()
+    print("Next pickup: %s %s" % (nextPD, ','.join(nextPT)))
+
+    #data = awl.getschedule()
+    #if data:
+    #    for key, value in data.items():
+    #        month_year: list[str] = key.split("-")
+    #        month: int = int(month_year[0]) + 1
+    #        year: int = int(month_year[1])
+    #        for dayValue, wastes in value.items():
+    #            day: int = int(dayValue)
+    #            for waste in wastes:
+    #                    print(datetime.date(year, month, day), waste)  # Collection date
+
+# "my Original test case"
+def main_old():
     apiUrl = 'https://buergerportal.awl-neuss.de/api/v1/calendar'
     streetName = 'Goethestrasse'
     HouseNumber = '39'
@@ -264,20 +296,4 @@ def main():
                     # print()                               # Collection type
 
 if __name__ == '__main__':
-    awl = awlAPI('../littlet.conf')
-    ##awl = awlAPI()
-    #awl.searchstr("Bergheim")
-    #print(awl.confData)
-    #main()
-    #data = awl.getschedule(5, tonne='gelb')
-    awl.nextpickup()
-
-#    if data:
-#        for key, value in data.items():
-#            month_year: list[str] = key.split("-")
-#            month: int = int(month_year[0]) + 1
-#            year: int = int(month_year[1])
-#            for dayValue, wastes in value.items():
-#                day: int = int(dayValue)
-#                for waste in wastes:
-#                        print(datetime.date(year, month, day), waste)  # Collection date
+    main()
