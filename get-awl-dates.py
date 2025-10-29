@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-import requests
-import json
 import datetime
 import os
 import re
+import json
+import requests
 
-class awlAPI():
+
+class AwlAPI():
     """ awlAPI - access to the (Neuss) AWL API
 
     """
@@ -221,12 +222,15 @@ class awlAPI():
         print("If more than one street name matches make sure to use the sreet number where your house number is in the list!")
         print("\n\n")
 
+
 def main():
-    awl = awlAPI('../littlet.conf')
+    """ main loop
+    """
+    awl = AwlAPI('../littlet.conf')
     # awl.searchstr("Bergheim")
-    #print(awl.confData)
-    #main()
-    #nextPD, nextPT = awl.nextpickup(tonne='blau')
+    # print(awl.confData)
+    # main()
+    # nextPD, nextPT = awl.nextpickup(tonne='blau')
     nextPD, nextPT = awl.nextpickup()
     print("Next pickup: %s %s" % (nextPD, ','.join(nextPT)))
 
@@ -240,6 +244,7 @@ def main():
     #            day: int = int(dayValue)
     #            for waste in wastes:
     #                    print(datetime.date(year, month, day), waste)  # Collection date
+
 
 # "my Original test case"
 def main_old():
