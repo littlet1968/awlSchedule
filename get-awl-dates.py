@@ -42,27 +42,31 @@ class AwlAPI():
         valid_conf = 0
         try:
             if not config_file:
-                config_file = os.path.dirname(__file__) + '/awl.conf'
+                config_file = os.path.dirname(__file__) + './awl.conf'
             with open(config_file, encoding='utf-8') as jf:
                 conf_data = json.load(jf)
 
-            if conf_data['config']:
-                if conf_data['config']['StrasseNummer'] or \
-                   conf_data['config']['StrasseName']:
-                    # do we have a street number or name in the config
-                    valid_conf += 1
-                if conf_data['config']['HausNummer']:
-                    # we need also the HouseNumnber
-                    valid_conf += 1
-            if valid_conf != 2:
-                conf_data = None
-            else:
+            for conf_ind, conf_val in enumerate(conf_data['config']):
+                print(f"configuration index: {conf_ind} and value: {conf_val}")
 
-            return conf_data
+#            if conf_data['config']:
+#                if conf_data['config']['StrasseNummer'] or \
+#                   conf_data['config']['StrasseName']:
+#                    # do we have a street number or name in the config
+#                    valid_conf += 1
+#                if conf_data['config']['HausNummer']:
+#                    # we need also the HouseNumnber
+#                    valid_conf += 1
+#            if valid_conf != 2:
+#                conf_data = None
+# else:
 
         except Exception as e:
             print(f"Error reading configuration file {config_file} - {e}")
-            sys.exit(1)
+            conf_data = None
+
+        finally:
+            return conf_data
 
     def gettownstreets(self):
         """Get all town streets from the website."""
@@ -219,7 +223,6 @@ class AwlAPI():
 
     def searchstr(self, searchStr=None):
         """Search for a street(s) by pattern.
-
         [searchStr] = the street to search for
         Prints the strasseNummer and strasseBezeichnung that can be used for
         the conf file
@@ -254,12 +257,11 @@ def main():
     # print(awl.conf_data)
     # main()
     # nextPD, nextPT = awl.nextpickup(tonne='blau')
-    next_pd, next_pt = awl.nextpickup()
-
-    if next_pd:
-        print("Next pickup: %s %s" % (nextPD, ','.join(nextPT)))
-    else:
-        print("Did not found next pickup"
+#    next_pd, next_pt = awl.nextpickup()
+ #   if next_pd:
+ #       print("Next pickup: %s %s" % (nextPD, ','.join(nextPT)))
+ #   else:
+ #       print("Did not found next pickup")
 
     # data = awl.getschedule()
     # if data:
@@ -276,46 +278,46 @@ def main():
 # "my Original test case"
 def main_old():
     """Old main loop."""
-    api_url='https://buergerportal.awl-neuss.de/api/v1/calendar'
-    streetName='Goethestrasse'
-    HouseNumber='39'
-    streetCode=None
+    api_url = 'https://buergerportal.awl-neuss.de/api/v1/calendar'
+    streetName = 'Goethestrasse'
+    HouseNumber = '39'
+    streetCode = None
 
-    chkStreet=requests.get(api_url + "/townarea-streets")
+    chkStreet = requests.get(api_url + "/townarea-streets")
     if chkStreet.status_code == 200:
-        dataStreet=json.loads(chkStreet.text)
+        dataStreet = json.loads(chkStreet.text)
 
         for item in dataStreet:
             #    print(item["strasseBezeichnung"])
             if item["strasseBezeichnung"] == streetName:
                 print(item)
                 if item["strasseNummer"] != streetCode:
-                    streetCode=item["strasseNummer"]
+                    streetCode = item["strasseNummer"]
                     break
 
-        args={
+        args = {
             "streetNum": streetCode,
             "homeNumber": HouseNumber
         }
 
-        now=datetime.datetime.now()
+        now = datetime.datetime.now()
         # args["startMonth"] = now.year + "-" + now.month
         # args["startMonth"] = "Thu Apr 11 2024" # working
-        args["startMonth"]="APR 2024"  # needs to Mon-YYYY or MON YYYY
-        args["isTreeMonthRange"]="false"  # get 3 month range disables isYear
-        args["isYear"]="false"    # if true get the full year
+        args["startMonth"] = "APR 2024"  # needs to Mon-YYYY or MON YYYY
+        args["isTreeMonthRange"] = "false"  # get 3 month range disables isYear
+        args["isYear"] = "false"    # if true get the full year
 
-        r=requests.get(api_url, params=args)
+        r = requests.get(api_url, params=args)
 
-        data=json.loads(r.text)
-        entries=[]  # List that holds collection schedule
+        data = json.loads(r.text)
+        entries = []  # List that holds collection schedule
         for key, value in data.items():
-            month_year: list[str]=key.split("-")
-            month: int=int(month_year[0]) + 1
-            year: int=int(month_year[1])
+            month_year: list[str] = key.split("-")
+            month: int = int(month_year[0]) + 1
+            year: int = int(month_year[1])
 
             for dayValue, wastes in value.items():
-                day: int=int(dayValue)
+                day: int = int(dayValue)
                 # for waste in wastes:
                 #    entries.append(
                 #        Collection(
