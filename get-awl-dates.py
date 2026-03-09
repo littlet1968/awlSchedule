@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
+"""awlAPI.
 
+my take on the awl API to get scheules for the garbage pcik in Nuess"
+"""
 import datetime
 import json
 import os
 import re
 import sys
-
 import requests
 
 
@@ -20,10 +22,11 @@ class AwlAPI():
         self.api_url = 'https://buergerportal.awl-neuss.de/api/v1/calendar'
         self.str_url = '/townarea-streets'
         self.town_streets = None
+        self.valid_config = False  # did we validate the configuration already
         self.waste_bins = ["blau", "braun", "gelb", "grau", "pink"]
 
         # get configuration data
-        self.conf_data = self.getconf(config_file)
+        self.conf_data = self.read_conf(config_file)
         # get all streets
         self.town_streets = self.gettownstreets()
 
@@ -33,24 +36,33 @@ class AwlAPI():
         # else:
         #    self.valstreet()   # not implemented yet
 
-    def getconf(self, config_file):
-        """Get the config.
+    def read_conf(self, config_file='./awl.conf'):
+        """GetRead the configuration.
 
         config_file = full path and name to the config file,
-        if not specified awl.conf in script path
+        if not specified awl.conf in script path will tried to be read
         """
         valid_conf = 0
         try:
-            if not config_file:
-                config_file = os.path.dirname(__file__) + './awl.conf'
             with open(config_file, encoding='utf-8') as jf:
                 conf_data = json.load(jf)
+        except FileNotFoundError as e:
+            print(f'Could not open {config_file} / {e}')
+            self.valid_config = False
+            if input("Do you want to create a configuration?").upper() in "JY":
+                create_conf(self)
+            return
 
-            for conf_ind, conf_val in enumerate(conf_data['config']):
-                print(f"configuration index: {conf_ind} and value: {conf_val}")
+        try:
+            if conf_data['config']:
+                self.valid_config if conf_data['config']['ConfigValidated'] \
+                    == 'True' else 'False'
 
-#            if conf_data['config']:
-#                if conf_data['config']['StrasseNummer'] or \
+                if conf_data['config']['StrasseNummer']:
+                    print(
+                        f'ConfigStrasseNummer: {conf_data['config']['StrasseNummer']}')
+
+                    #                if conf_data['config']['StrasseNummer'] or \
 #                   conf_data['config']['StrasseName']:
 #                    # do we have a street number or name in the config
 #                    valid_conf += 1
@@ -81,6 +93,12 @@ class AwlAPI():
 
         town_streets = json.loads(res_town_str.text)
         return town_streets
+
+    def verify_config(self, street_num=None):
+        """Not yet implemeted."""
+        return
+
+    def get_conf
 
     def getschedule(self, monat=None, tonne=None, jahr=False):
         """[getschedule] - get the schedule.
@@ -223,6 +241,7 @@ class AwlAPI():
 
     def searchstr(self, searchStr=None):
         """Search for a street(s) by pattern.
+
         [searchStr] = the street to search for
         Prints the strasseNummer and strasseBezeichnung that can be used for
         the conf file
