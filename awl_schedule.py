@@ -255,9 +255,13 @@ class AWLScheduleClient:
 
         self.save_config()
 
-    def get_next_pickup_date(self, ):
-        """Get the next pickup date"""
+    def get_next_pickup_date(self, bins=None):
+        """Get the next pickup date."""
+        if not bins:
+            # no bins select get all
+            bins = self.config.waste_bins
 
+        pickups = self.fetch_pickups(bins)
         return
 
 # ------------------------------------------------------------------
