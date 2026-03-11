@@ -14,14 +14,12 @@ import argparse
 import pathlib
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Sequence
-
 import requests
 
 
 @dataclass
 class AWLConfig:
     """Represents the persisted AWL configuration."""
-
     api_url: str = "https://buergerportal.awl-neuss.de/api/v1/calendar"
     streets_endpoint: str = "/townarea-streets"
     waste_bins: List[str] = field(
@@ -88,9 +86,34 @@ class AWLScheduleClient:
                                     encoding="utf-8")
 
     # ------------------------------------------------------------------
-    # API interaction
+    # Helper methods
     # ------------------------------------------------------------------
 
+    def _validate_selection(self, entry: str, labels: Iterable[str]) -> None:
+        entry_normalized = entry.strip().lower()
+        if not any(label.lower() == entry_normalized for label in labels):
+            raise ValueError(
+                "Entered street name is not in the available list")
+
+    @staticmethod
+    def _default_select_fn(labels: List[str]) -> int:
+        for idx, label in enumerate(labels):
+            print(f"[{idx}] {label}")
+        while True:
+            raw = input("Select the street index: ")
+            if raw.isdigit():
+                chosen = int(raw)
+                if 0 <= chosen < len(labels):
+                    return chosen
+            print("Invalid selection, try again.")
+
+    @staticmethod
+    def _default_input_fn(prompt: str) -> str:
+        return input(prompt)
+
+    # ------------------------------------------------------------------
+    # API interaction
+    # ------------------------------------------------------------------
     def _get(self, endpoint: str) -> list[dict]:
         """Get data from the endpoint."""
         url = f"{self.config.api_url}{endpoint}"
@@ -104,6 +127,10 @@ class AWLScheduleClient:
     def fetch_streets(self) -> list[dict]:
         """Fetch the all streets from the AWL portal."""
         return self._get(self.config.streets_endpoint)
+
+    def fetch_pickups(self, date=None, bins=None) -> list[dict]:
+        """Use the _get API call to fetch pickups."""
+        return
 
     # ------------------------------------------------------------------
     # Interactive workflow
@@ -184,7 +211,6 @@ class AWLScheduleClient:
             It receives the list of street labels and returns the chosen index.
         :param input_fn: Optional callable to obtain textual user input.
         """
-
         if self.config.is_complete:
             return
 
@@ -229,41 +255,26 @@ class AWLScheduleClient:
 
         self.save_config()
 
-    # ------------------------------------------------------------------
-    # Helper methods
-    # ------------------------------------------------------------------
+    def get_next_pickup_date(self, ):
+        """Get the next pickup date"""
 
-    def _validate_selection(self, entry: str, labels: Iterable[str]) -> None:
-        entry_normalized = entry.strip().lower()
-        if not any(label.lower() == entry_normalized for label in labels):
-            raise ValueError(
-                "Entered street name is not in the available list")
+        return
 
-    @staticmethod
-    def _default_select_fn(labels: List[str]) -> int:
-        for idx, label in enumerate(labels):
-            print(f"[{idx}] {label}")
-        while True:
-            raw = input("Select the street index: ")
-            if raw.isdigit():
-                chosen = int(raw)
-                if 0 <= chosen < len(labels):
-                    return chosen
-            print("Invalid selection, try again.")
-
-    @staticmethod
-    def _default_input_fn(prompt: str) -> str:
-        return input(prompt)
-
-    # ------------------------------------------------------------------
-    # Select Street from list of strees
-    # ------------------------------------------------------------------
+# ------------------------------------------------------------------
+# The main program starts here
+# ------------------------------------------------------------------
 
 
 def main() -> None:
-    """Main program loop."""
-
-    client = AWLScheduleClient('../littlet.conf')
+    """Program main loop."""
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-c', '--config',
+                    required=False,
+                    default='awl.conf',
+                    help='configuration file to use')
+    args = ap.parse_args()
+    print(f"arguments {args}")
+    client = AWLScheduleClient(args.config)
 
     # Ensure a street configuration exists (prompts user if needed)
     client.ensure_street_selected()

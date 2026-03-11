@@ -98,8 +98,6 @@ class AwlAPI():
         """Not yet implemeted."""
         return
 
-    def get_conf
-
     def getschedule(self, monat=None, tonne=None, jahr=False):
         """[getschedule] - get the schedule.
 
