@@ -37,7 +37,7 @@ class AwlAPI():
         #    self.valstreet()   # not implemented yet
 
     def read_conf(self, config_file='./awl.conf'):
-        """GetRead the configuration.
+        """Get read the configuration.
 
         config_file = full path and name to the config file,
         if not specified awl.conf in script path will tried to be read

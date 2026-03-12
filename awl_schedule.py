@@ -11,6 +11,7 @@ from __future__ import annotations
 import curses
 import json
 import argparse
+import datetime
 import pathlib
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Sequence
@@ -20,6 +21,7 @@ import requests
 @dataclass
 class AWLConfig:
     """Represents the persisted AWL configuration."""
+
     api_url: str = "https://buergerportal.awl-neuss.de/api/v1/calendar"
     streets_endpoint: str = "/townarea-streets"
     waste_bins: List[str] = field(
@@ -35,7 +37,7 @@ class AWLConfig:
 
 
 class AWLScheduleClient:
-    """High-level client orchestrating configuration and street selection."""
+    """High-level AWL client."""
 
     def __init__(self, config_path: str | pathlib.Path = "awl.conf") -> None:
         """Class initialisation steps.
@@ -114,23 +116,31 @@ class AWLScheduleClient:
     # ------------------------------------------------------------------
     # API interaction
     # ------------------------------------------------------------------
-    def _get(self, endpoint: str) -> list[dict]:
+    def _get(self, endpoint=None, args=None) -> list[dict]:
         """Get data from the endpoint."""
-        url = f"{self.config.api_url}{endpoint}"
-        response = requests.get(url, timeout=30)
+        url = f"{self.config.api_url}"
+        if endpoint:
+            url = f"{url}{endpoint}"
+        if args:
+            response = requests.get(url,  params=args, timeout=30)
+        else:
+            response = requests.get(url, timeout=30)
         response.raise_for_status()
         data = response.json()
-        if not isinstance(data, list):
-            raise RuntimeError("Expected list from AWL API")
+        if not isinstance(data, (list, dict)):
+            raise RuntimeError("Expected list or dict from AWL API")
+
         return data
 
     def fetch_streets(self) -> list[dict]:
         """Fetch the all streets from the AWL portal."""
         return self._get(self.config.streets_endpoint)
 
-    def fetch_pickups(self, date=None, bins=None) -> list[dict]:
+    def fetch_pickups(self, args=None) -> list[dict]:
         """Use the _get API call to fetch pickups."""
-        return
+        if not args:
+            raise RuntimeError("Error at fetch_pickups: no arguments passed")
+        return self._get(args=args)
 
     # ------------------------------------------------------------------
     # Interactive workflow
@@ -148,12 +158,12 @@ class AWLScheduleClient:
         stdscr.clear()
         max_y, _ = stdscr.getmaxyx()
 
-        stdscr.addstr(0, 0, "Type to filter cities (ESC to quit)")
+        stdscr.addstr(0, 0, "Type to filter street (ESC to quit)")
         stdscr.addstr(1, 0, f"> {query}")
         stdscr.addstr(2, 0, "Results:")
 
-        for idx, city in enumerate(filtered[: max_y - 4]):
-            line = f"  {city['strasseBezeichnung']}"
+        for idx, street in enumerate(filtered[: max_y - 4]):
+            line = f"  {street['strasseBezeichnung']}"
             if idx == highlight_idx:
                 stdscr.attron(curses.A_REVERSE)
                 stdscr.addstr(3 + idx, 0, line)
@@ -204,7 +214,7 @@ class AWLScheduleClient:
             else:
                 highlight_idx = 0
 
-    def ensure_street_selected(self, select_fn=None, input_fn=None) -> None:
+    def ensure_correct_street(self, select_fn=None, input_fn=None) -> None:
         """Ensure configuration contains a street selection.
 
         :param select_fn: Optional callable to present a selection UI.
@@ -260,9 +270,44 @@ class AWLScheduleClient:
         if not bins:
             # no bins select get all
             bins = self.config.waste_bins
-
-        pickups = self.fetch_pickups(bins)
+        pickups = self.fetch_pickups()
         return
+
+    def get_pickup_dates(self, range="m", bins=None):
+        """Get AWL waste bin pickup dates.
+
+        param: range: Optional
+                "m"  - (default) - get pickups for the current month
+                "3m" - 3 months range
+                "y"  - get all dates for this year
+        param: bins: Optional
+                type of config.waste_bins
+        """
+        args = {
+            "streetNum": self.config.strasse_nummer,
+            "homeNumber": "1",  # not used anyway
+            "startMonth": datetime.datetime.now().strftime('%b %Y')
+        }
+
+        # no bins specified we will use all
+        if not bins:
+            bins = self.config.waste_bins
+        else:
+            if bins not in self.config.waste_bins:
+                raise RuntimeError(
+                    f"Error in get_pickup_dates: bins not correct {bins}")
+
+        if range == "3m":
+            args["isYear"] = "false"
+            args["isTreeMonthRange"] = "true"
+        elif range == "y":
+            args["isYear"] = "true"
+            args["isTreeMonthRange"] = "false"
+        else:
+            args["isYear"] = "false"
+            args["isTreeMonthRange"] = "false"
+
+        return self._get(args=args)
 
 # ------------------------------------------------------------------
 # The main program starts here
@@ -277,19 +322,24 @@ def main() -> None:
                     default='awl.conf',
                     help='configuration file to use')
     args = ap.parse_args()
-    print(f"arguments {args}")
+    # print(f"arguments {args}")
+    # initialize the class and read the config
     client = AWLScheduleClient(args.config)
 
     # Ensure a street configuration exists (prompts user if needed)
-    client.ensure_street_selected()
+    client.ensure_correct_street()
+
+    # Get pickup dates
+    pickup_dates = client.get_pickup_dates(range='m', bins="green")
+    print(f"{pickup_dates}")
 
     # Placeholder for future steps: e.g., fetch next garbage pickup dates
-    print(
-        "Configured street:",
-        client.config.strasse_bezeichnung,
-        f"(ID: {client.config.strasse_nummer})",
-    )
-    print("TODO: Call additional API endpoints to retrieve pickup schedule.")
+    # print(
+    #    "Configured street:",
+    #    client.config.strasse_bezeichnung,
+    #    f"(ID: {client.config.strasse_nummer})",
+    # )
+    # print("TODO: Call additional API endpoints to retrieve pickup schedule.")
 
 
 if __name__ == "__main__":
