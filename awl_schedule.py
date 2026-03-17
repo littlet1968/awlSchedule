@@ -31,6 +31,7 @@ class AWLConfig:
 
     @property
     def is_complete(self) -> bool:
+        """Checks if configuration is complete."""
         return bool(self.strasse_nummer and self.strasse_bezeichnung)
 
 
@@ -38,6 +39,7 @@ class AWLScheduleClient:
     """High-level client orchestrating configuration and street selection."""
 
     def __init__(self, config_path: str | pathlib.Path = "awl.conf") -> None:
+        """Class configuration."""
         self.config_path = pathlib.Path(config_path)
         self.config = self._load_config()
 
@@ -53,9 +55,10 @@ class AWLScheduleClient:
             data = json.loads(self.config_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             # we have some problems reading the configuration so do it again
-            print(f"Error {exc} loading the configuration, going for a fresh one!")
+            print(
+                f"Error {exc} loading the configuration, going for a fresh one!")
             return AWLConfig()
-     
+
         except OSError as exc:
             raise RuntimeError(f"Failed to read configuration: {exc}") from exc
 
@@ -76,7 +79,8 @@ class AWLScheduleClient:
             "strasseNummer": self.config.strasse_nummer,
             "strasseBezeichnung": self.config.strasse_bezeichnung,
         }
-        self.config_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        self.config_path.write_text(json.dumps(
+            payload, indent=2), encoding="utf-8")
 
     # ------------------------------------------------------------------
     # API interaction
@@ -104,7 +108,6 @@ class AWLScheduleClient:
         query_lower = query.lower()
         return [street for street in streets if query_lower in street["strasseBezeichnung"].lower()]
 
-
     def draw_menu(self, stdscr, query: str, filtered: Sequence[dict], highlight_idx: int) -> None:
         """Draw a menu to select a street."""
         stdscr.clear()
@@ -127,7 +130,6 @@ class AWLScheduleClient:
             stdscr.addstr(3, 0, "  No matches")
 
         stdscr.refresh()
-
 
     def select_street(self, stdscr, streets: Sequence[dict]) -> dict | None:
         """Select a street from a list of streets."""
@@ -167,8 +169,6 @@ class AWLScheduleClient:
             else:
                 highlight_idx = 0
 
-
-
     def ensure_street_selected(self, select_fn=None, input_fn=None) -> None:
         """Ensure configuration contains a street selection.
 
@@ -198,11 +198,12 @@ class AWLScheduleClient:
 #        self.config.strasse_bezeichnung = selected_street.get("strasseBezeichnung")
 
         def runner(stdscr):
-            #selection = select_city(stdscr, CITIES)
+            # selection = select_city(stdscr, CITIES)
             selection = self.select_street(stdscr, streets)
             stdscr.clear()
             if selection:
-                stdscr.addstr(0, 0, f"You selected: {selection['strasseBezeichnung']}")
+                stdscr.addstr(
+                    0, 0, f"You selected: {selection['strasseBezeichnung']}")
                 self.config.strasse_nummer = selection["strasseNummer"]
                 self.config.strasse_bezeichnung = selection["strasseBezeichnung"]
             else:
@@ -212,7 +213,7 @@ class AWLScheduleClient:
             stdscr.getch()
 
         curses.wrapper(runner)
-        
+
         self.save_config()
 
     # ------------------------------------------------------------------
@@ -222,7 +223,8 @@ class AWLScheduleClient:
     def _validate_selection(self, entry: str, labels: Iterable[str]) -> None:
         entry_normalized = entry.strip().lower()
         if not any(label.lower() == entry_normalized for label in labels):
-            raise ValueError("Entered street name is not in the available list")
+            raise ValueError(
+                "Entered street name is not in the available list")
 
     @staticmethod
     def _default_select_fn(labels: List[str]) -> int:
@@ -239,11 +241,10 @@ class AWLScheduleClient:
     @staticmethod
     def _default_input_fn(prompt: str) -> str:
         return input(prompt)
-    
+
     # ------------------------------------------------------------------
     # Select Street from list of strees
     # ------------------------------------------------------------------
-
 
 
 def main() -> None:
