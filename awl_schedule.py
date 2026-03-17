@@ -116,10 +116,11 @@ class AWLScheduleClient:
     def filter_next_available_day(self, pickups):
         """Return the next available pickup date from the pickups dict."""
         # Parse the current date
-        current_date = datetime.now()  # go back one day to include today if pickup is later today
+        # go back one day to include today if pickup is later today
+        current_date = datetime.now()
         current_year = current_date.year
         # current month is 0-based in the API, so we need to adjust it
-        current_month = current_date.month -1
+        current_month = current_date.month - 1
         current_day = current_date.day
 
         next_pickup = None
@@ -137,7 +138,7 @@ class AWLScheduleClient:
             for day, items in days.items():
                 day = int(day)
                 # Create a datetime object for the pickup date (adjust month back to 1-based)
-                pickup_date = datetime(year, month +1, day)
+                pickup_date = datetime(year, month + 1, day)
 
                 # Skip past days in the current month
                 if pickup_date < current_date:
@@ -366,7 +367,7 @@ def main() -> None:
         for day, bins in days.items():
             print(f"{day} : {bins}")
 
-    next_pickup = client.get_next_pickup_date(bins=["pink", "gelb", "blau"])
+    next_pickup = client.get_next_pickup_date(bins=["gelb"])
     print("Next pickup:", next_pickup)
 
     # Placeholder for future steps: e.g., fetch next garbage pickup dates
