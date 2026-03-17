@@ -8,9 +8,10 @@ via the AWL API, and persistence of the selected street configuration.
 
 from __future__ import annotations
 
-import curses
-import json
 import argparse
+import curses
+from datetime import datetime
+import json
 import pathlib
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Sequence
@@ -37,7 +38,7 @@ class AWLConfig:
 
 
 class AWLScheduleClient:
-    """High-level client orchestrating configuration and street selection."""
+    """High-level AWL client."""
 
     def __init__(self, config_path: str | pathlib.Path = "awl.conf") -> None:
         """Class initialisation steps.
@@ -88,22 +89,96 @@ class AWLScheduleClient:
                                     encoding="utf-8")
 
     # ------------------------------------------------------------------
+    # Helper methods
+    # ------------------------------------------------------------------
+
+    def _validate_selection(self, entry: str, labels: Iterable[str]) -> None:
+        entry_normalized = entry.strip().lower()
+        if not any(label.lower() == entry_normalized for label in labels):
+            raise ValueError(
+                "Entered street name is not in the available list")
+
+    def filter_pickups_by_bins(self, pickups: dict, bins: list[str]) -> dict:
+        """Return a dict of pickup dates filtered by bin types."""
+        filtered: dict = {}
+        requested = set(bins)
+
+        for month, days in pickups.items():
+            filtered_days: dict = {}
+            for day, day_bins in days.items():
+                kept = [b for b in day_bins if b in requested]
+                if kept:
+                    filtered_days[day] = kept
+            if filtered_days:
+                filtered[month] = filtered_days
+        return filtered
+
+    def filter_next_available_day(self, pickups):
+        """Return the next available pickup date from the pickups dict."""
+        # Parse the current date
+        # go back one day to include today if pickup is later today
+        current_date = datetime.now()
+        current_year = current_date.year
+        # current month is 0-based in the API, so we need to adjust it
+        current_month = current_date.month - 1
+        current_day = current_date.day
+
+        next_pickup = None
+        next_date = None
+
+        # Iterate through the months and years in the dictionary
+        for month_year, days in pickups.items():
+            month, year = map(int, month_year.split('-'))
+
+            # Skip past months/years
+            if year < current_year or (year == current_year and month < current_month):
+                continue
+
+            # Check days in the current or future month
+            for day, items in days.items():
+                day = int(day)
+                # Create a datetime object for the pickup date (adjust month back to 1-based)
+                pickup_date = datetime(year, month + 1, day)
+
+                # Skip past days in the current month
+                if pickup_date < current_date:
+                    continue
+
+                # Update the next pickup if it's earlier than the current next_date
+                if next_date is None or pickup_date < next_date:
+                    next_date = pickup_date
+                    next_pickup = {f"{month}-{year}": {str(day): items}}
+
+        return next_pickup
+# ------------------------------------------------------------------
     # API interaction
     # ------------------------------------------------------------------
 
-    def _get(self, endpoint: str) -> list[dict]:
+    def _get(self, endpoint=None, args=None) -> list[dict]:
         """Get data from the endpoint."""
-        url = f"{self.config.api_url}{endpoint}"
-        response = requests.get(url, timeout=30)
+        url = f"{self.config.api_url}"
+        if endpoint:
+            url = f"{url}{endpoint}"
+        if args:
+            response = requests.get(url,  params=args, timeout=30)
+        else:
+            response = requests.get(url, timeout=30)
         response.raise_for_status()
         data = response.json()
-        if not isinstance(data, list):
-            raise RuntimeError("Expected list from AWL API")
+        if not isinstance(data, (list, dict)):
+            raise RuntimeError("Expected list or dict from AWL API")
+
         return data
 
     def fetch_streets(self) -> list[dict]:
-        """Fetch the all streets from the AWL portal."""
+        """Fetch all streets from the AWL portal."""
         return self._get(self.config.streets_endpoint)
+
+    def fetch_pickups(self, args=None) -> list[dict]:
+        """Use the _get API call to fetch pickups."""
+        if not args:
+            raise RuntimeError("Error at fetch_pickups: no arguments passed")
+        return self._get(args=args)
 
     # ------------------------------------------------------------------
     # Interactive workflow
@@ -121,12 +196,12 @@ class AWLScheduleClient:
         stdscr.clear()
         max_y, _ = stdscr.getmaxyx()
 
-        stdscr.addstr(0, 0, "Type to filter cities (ESC to quit)")
+        stdscr.addstr(0, 0, "Type to filter street (ESC to quit)")
         stdscr.addstr(1, 0, f"> {query}")
         stdscr.addstr(2, 0, "Results:")
 
-        for idx, city in enumerate(filtered[: max_y - 4]):
-            line = f"  {city['strasseBezeichnung']}"
+        for idx, street in enumerate(filtered[: max_y - 4]):
+            line = f"  {street['strasseBezeichnung']}"
             if idx == highlight_idx:
                 stdscr.attron(curses.A_REVERSE)
                 stdscr.addstr(3 + idx, 0, line)
@@ -177,33 +252,14 @@ class AWLScheduleClient:
             else:
                 highlight_idx = 0
 
-    def ensure_street_selected(self, select_fn=None, input_fn=None) -> None:
-        """Ensure configuration contains a street selection.
-
-        :param select_fn: Optional callable to present a selection UI.
-            It receives the list of street labels and returns the chosen index.
-        :param input_fn: Optional callable to obtain textual user input.
-        """
-
+    def ensure_correct_street(self) -> None:
+        """Ensure configuration contains a street selection."""
+        # do we have a complete configuration already? if yes we are done
         if self.config.is_complete:
             return
 
+        # get all streets via API
         streets = self.fetch_streets()
-#        labels = [s.get("strasseBezeichnung", "") for s in streets]
-#
-#        if select_fn is None:
-#            select_fn = self._default_select_fn
-#        if input_fn is None:
-#            input_fn = self._default_input_fn
-#
-#        selected_index = select_fn(labels)
-#        manual_entry = input_fn("Enter the street name for verification: ")
-#
-#        self._validate_selection(manual_entry, labels)
-#
-#        selected_street = streets[selected_index]
-#        self.config.strasse_nummer = selected_street.get("strasseNummer")
-#        self.config.strasse_bezeichnung = selected_street.get("strasseBezeichnung")
 
         def runner(stdscr):
             # selection = select_city(stdscr, CITIES)
@@ -229,52 +285,98 @@ class AWLScheduleClient:
 
         self.save_config()
 
-    # ------------------------------------------------------------------
-    # Helper methods
-    # ------------------------------------------------------------------
+    def get_next_pickup_date(self, bins=None):
+        """Get the next pickup date."""
+        if not bins:
+            # no bins select get all
+            bins = self.config.waste_bins
 
-    def _validate_selection(self, entry: str, labels: Iterable[str]) -> None:
-        entry_normalized = entry.strip().lower()
-        if not any(label.lower() == entry_normalized for label in labels):
-            raise ValueError(
-                "Entered street name is not in the available list")
+        # get pickups for this month
+        pickups = self.get_pickup_dates(scope="m", bins=bins)
+        # select the next pickup date from the pickups dict
+        return self.filter_next_available_day(pickups)
 
-    @staticmethod
-    def _default_select_fn(labels: List[str]) -> int:
-        for idx, label in enumerate(labels):
-            print(f"[{idx}] {label}")
-        while True:
-            raw = input("Select the street index: ")
-            if raw.isdigit():
-                chosen = int(raw)
-                if 0 <= chosen < len(labels):
-                    return chosen
-            print("Invalid selection, try again.")
+    def get_pickup_dates(self, scope="m", bins: Optional[list] = None):
+        """Get AWL waste bin pickup dates.
 
-    @staticmethod
-    def _default_input_fn(prompt: str) -> str:
-        return input(prompt)
+        param: range: Optional
+                "m"  - (default) - get pickups for the current month
+                "3m" - 3 months range
+                "y"  - get all dates for this year
+        param: bins: Optional
+                type of config.waste_bins
+        """
+        # arguments for the API call
+        args = {
+            "streetNum": self.config.strasse_nummer,
+            "homeNumber": "1",  # not used anyway
+            "startMonth": datetime.now().strftime('%b %Y')
+        }
 
-    # ------------------------------------------------------------------
-    # Select Street from list of strees
-    # ------------------------------------------------------------------
+        if scope == "3m":
+            args["isYear"] = "false"
+            args["isTreeMonthRange"] = "true"
+        elif scope == "y":
+            args["isYear"] = "true"
+            args["isTreeMonthRange"] = "false"
+        else:
+            args["isYear"] = "false"
+            args["isTreeMonthRange"] = "false"
+
+        pickups = self._get(args=args)
+
+        # no bins specified we will use all and return directly
+        if not bins:
+            bins = self.config.waste_bins
+            return pickups
+
+        if not set(bins).issubset(set(self.config.waste_bins)):
+            invl_bins = [
+                item for item in bins if item not in self.config.waste_bins]
+            print(f"Warning: {invl_bins} is not a valid waste type")
+
+        return self.filter_pickups_by_bins(pickups, bins)
 
 
+# ------------------------------------------------------------------
+# The main program loop starts here
+# ------------------------------------------------------------------
 def main() -> None:
-    """Main program loop."""
-
-    client = AWLScheduleClient('../littlet.conf')
+    """Program main loop."""
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-c', '--config',
+                    required=False,
+                    default='awl.conf',
+                    help='configuration file to use')
+    args = ap.parse_args()
+    # print(f"arguments {args}")
+    # initialize the class and read the config
+    client = AWLScheduleClient(args.config)
 
     # Ensure a street configuration exists (prompts user if needed)
-    client.ensure_street_selected()
+    client.ensure_correct_street()
+
+    # Get pickup dates
+    pickup_dates = client.get_pickup_dates(scope='m',
+                                           bins=["pink",
+                                                 "gelb",
+                                                 "blau"])
+    # print the results
+    for month, days in pickup_dates.items():
+        print(f"Month: {month}")
+        for day, bins in days.items():
+            print(f"{day} : {bins}")
+
+    next_pickup = client.get_next_pickup_date(bins=["gelb"])
+    print("Next pickup:", next_pickup)
 
     # Placeholder for future steps: e.g., fetch next garbage pickup dates
-    print(
-        "Configured street:",
-        client.config.strasse_bezeichnung,
-        f"(ID: {client.config.strasse_nummer})",
-    )
-    print("TODO: Call additional API endpoints to retrieve pickup schedule.")
+    # print(
+    #    "Configured street:",
+    #    client.config.strasse_bezeichnung,
+    #    f"(ID: {client.config.strasse_nummer})",
+    # )
+    # print("TODO: Call additional API endpoints to retrieve pickup schedule.")
 
 
 if __name__ == "__main__":

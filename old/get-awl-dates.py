@@ -37,7 +37,7 @@ class AwlAPI():
         #    self.valstreet()   # not implemented yet
 
     def read_conf(self, config_file='./awl.conf'):
-        """GetRead the configuration.
+        """Get read the configuration.
 
         config_file = full path and name to the config file,
         if not specified awl.conf in script path will tried to be read
@@ -97,8 +97,6 @@ class AwlAPI():
     def verify_config(self, street_num=None):
         """Not yet implemeted."""
         return
-
-    def get_conf
 
     def getschedule(self, monat=None, tonne=None, jahr=False):
         """[getschedule] - get the schedule.
