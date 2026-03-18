@@ -60,7 +60,7 @@ class AwlAPI():
 
                 if conf_data['config']['StrasseNummer']:
                     print(
-                        f'ConfigStrasseNummer: {conf_data['config']['StrasseNummer']}')
+                        f"ConfigStrasseNummer: {conf_data['config']['StrasseNummer']}")
 
                     #                if conf_data['config']['StrasseNummer'] or \
 #                   conf_data['config']['StrasseName']:
