@@ -28,6 +28,8 @@ class AWLConfig:
     waste_bins: List[str] = field(
         default_factory=lambda: ["blau", "braun", "gelb", "grau", "pink"]
     )
+    bot_token: Optional[bot_token] = None
+    chat_id: Optional[chat_id] = None
     strasse_nummer: Optional[str] = None
     strasse_bezeichnung: Optional[str] = None
 
@@ -72,6 +74,8 @@ class AWLScheduleClient:
             api_url=data.get("API_URL", AWLConfig.api_url),
             streets_endpoint=data.get("STR_URL", AWLConfig.streets_endpoint),
             waste_bins=data.get("WASTE_BINS", AWLConfig().waste_bins),
+            bot_token=data.get("BOT_TOKEN", AWLConfig().bot_token),
+            chat_id=data.get("CHAT_ID", AWLConfig().chat_id),
             strasse_nummer=data.get("strasseNummer"),
             strasse_bezeichnung=data.get("strasseBezeichnung"),
         )
@@ -82,6 +86,8 @@ class AWLScheduleClient:
             "API_URL": self.config.api_url,
             "STR_URL": self.config.streets_endpoint,
             "WASTE_BINS": self.config.waste_bins,
+            "BOT_TOKEN": self.config.bot_token,
+            "CHAT_ID": self.config.chat_id,
             "strasseNummer": self.config.strasse_nummer,
             "strasseBezeichnung": self.config.strasse_bezeichnung,
         }
@@ -91,7 +97,6 @@ class AWLScheduleClient:
     # ------------------------------------------------------------------
     # Helper methods
     # ------------------------------------------------------------------
-
     def _validate_selection(self, entry: str, labels: Iterable[str]) -> None:
         entry_normalized = entry.strip().lower()
         if not any(label.lower() == entry_normalized for label in labels):
@@ -131,13 +136,15 @@ class AWLScheduleClient:
             month, year = map(int, month_year.split('-'))
 
             # Skip past months/years
-            if year < current_year or (year == current_year and month < current_month):
+            if year < current_year or (year == current_year
+                                       and month < current_month):
                 continue
 
             # Check days in the current or future month
             for day, items in days.items():
                 day = int(day)
-                # Create a datetime object for the pickup date (adjust month back to 1-based)
+                # Create a datetime object for the pickup date (adjust month
+                # back to 1-based)
                 pickup_date = datetime(year, month + 1, day)
 
                 # Skip past days in the current month
@@ -150,10 +157,10 @@ class AWLScheduleClient:
                     next_pickup = {f"{month}-{year}": {str(day): items}}
 
         return next_pickup
-# ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
     # API interaction
     # ------------------------------------------------------------------
-
     def _get(self, endpoint=None, args=None) -> list[dict]:
         """Get data from the endpoint."""
         url = f"{self.config.api_url}"
@@ -269,7 +276,8 @@ class AWLScheduleClient:
                 stdscr.clear()
                 if selection:
                     stdscr.addstr(
-                        0, 0, f"You selected: {selection['strasseBezeichnung']}")
+                        0, 0,
+                        f"You selected: {selection['strasseBezeichnung']}")
                     stdscr.addstr(1, 0, "Is this correct (Y/N)")
                     stdscr.refresh()
                     key = stdscr.getch()
@@ -348,10 +356,16 @@ def main() -> None:
                     required=False,
                     default='awl.conf',
                     help='configuration file to use')
+    ap.add_argument('-r', '--reconfigure',
+                    required=False,
+                    default=False,
+                    help='force reconfiguration')
     args = ap.parse_args()
-    # print(f"arguments {args}")
+
+    print(f"arguments {args}")
+
     # initialize the class and read the config
-    client = AWLScheduleClient(args.config)
+    client = AWLScheduleClient(args.config, args.reconfigure)
 
     # Ensure a street configuration exists (prompts user if needed)
     client.ensure_correct_street()
