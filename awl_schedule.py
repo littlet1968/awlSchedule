@@ -15,7 +15,6 @@ import json
 import pathlib
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Sequence
-
 import requests
 
 
@@ -260,7 +259,12 @@ class AWLScheduleClient:
                 highlight_idx = 0
 
     def ensure_correct_street(self) -> None:
-        """Ensure configuration contains a street selection."""
+        """Ensure configuration contains a street selection.
+
+        Checks if the configuration is complete with neccessary
+        street information. If not, it fetches the list of streets from the
+        AWL API and prompts the user to select the correct street.
+        """
         # do we have a complete configuration already? if yes we are done
         if self.config.is_complete:
             return
@@ -345,13 +349,50 @@ class AWLScheduleClient:
 
         return self.filter_pickups_by_bins(pickups, bins)
 
+    # ------------------------------------------------------------------
+    # Teleram "bot" interaction
+    # ------------------------------------------------------------------
+    def configure_telegram_bot(self) -> None:
+        """Configure Telegram bot settings."""
+        print("Do you want to configure the Telegram bot for notifications.")
+        input(
+        if
+        bot_token=input(
+            "Enter Telegram bot token (or leave blank to skip): ").strip()
+        chat_id=input(
+            "Enter Telegram chat ID (or leave blank to skip): ").strip
+
+        self.config.bot_token=bot_token
+        self.config.chat_id=chat_id
+        self.save_config()
+
+    def send_telegram_notification(bot_token, chat_id, message):
+        """
+        Send a notification to the Telegram bot.
+
+        Parameters:
+            bot_token (str): The token of the Telegram bot.
+            chat_id (str): The chat ID to send the message to.
+            message (str): The message to send.
+
+        Returns:
+            dict: The response from the Telegram API.
+        """
+        url=f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload={
+            "chat_id": chat_id,
+            "text": message
+        }
+        response=requests.post(url, json=payload)
+        return response.json()
+
 
 # ------------------------------------------------------------------
 # The main program loop starts here
 # ------------------------------------------------------------------
 def main() -> None:
     """Program main loop."""
-    ap = argparse.ArgumentParser()
+    ap=argparse.ArgumentParser()
     ap.add_argument('-c', '--config',
                     required=False,
                     default='awl.conf',
@@ -360,18 +401,24 @@ def main() -> None:
                     required=False,
                     default=False,
                     help='force reconfiguration')
-    args = ap.parse_args()
+    args=ap.parse_args()
 
     print(f"arguments {args}")
 
     # initialize the class and read the config
-    client = AWLScheduleClient(args.config, args.reconfigure)
+    client=AWLScheduleClient(args.config)
+
+    if args.reconfigure:
+        print("Forcing reconfiguration...")
+        client.config.strasse_nummer=None
+        client.config.strasse_bezeichnung=None
+        client.save_config()
 
     # Ensure a street configuration exists (prompts user if needed)
     client.ensure_correct_street()
 
     # Get pickup dates
-    pickup_dates = client.get_pickup_dates(scope='m',
+    pickup_dates=client.get_pickup_dates(scope='m',
                                            bins=["pink",
                                                  "gelb",
                                                  "blau"])
@@ -381,7 +428,7 @@ def main() -> None:
         for day, bins in days.items():
             print(f"{day} : {bins}")
 
-    next_pickup = client.get_next_pickup_date(bins=["gelb"])
+    next_pickup=client.get_next_pickup_date(bins=["gelb"])
     print("Next pickup:", next_pickup)
 
     # Placeholder for future steps: e.g., fetch next garbage pickup dates
